@@ -1,10 +1,10 @@
-import functions from "@google-cloud/functions-framework";
+import { http } from "@google-cloud/functions-framework";
 import { Client } from "@notionhq/client";
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const NOTION_HABITS_DATABASE_ID = "232de792635b80e6a595da782add070a";
 
-functions.http("helloHttp", async (req, res) => {
+http("helloHttp", async (req, res) => {
   res.set("Content-Type", "text/plain");
   if (req.method === "POST" && req.get("user-agent") == "NotionAutomation") {
     if (

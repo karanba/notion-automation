@@ -1,9 +1,13 @@
 {
+  "type": "module",
+  "name": "notion-functions",
+  "version": "1.0.0",
+  "description": "Google Cloud Functions with Notion API",
   "scripts": {
-    "start": "npx functions-framework --target=helloHttp [--signature-type=http]"
+    "start": "npx functions-framework --target=helloHttp --signature-type=http"
   },
   "dependencies": {
-    "@google-cloud/functions-framework": "^4.0.0",
+    "@google-cloud/functions-framework": "^3.0.0",
     "@notionhq/client": "^5.1.0",
     "node-fetch": "^3.3.2"
   }
