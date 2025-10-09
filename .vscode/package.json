@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@google-cloud/functions-framework": "^4.0.0",
+    "@notionhq/client": "^5.1.0",
+    "node-fetch": "^3.3.2"
+  }
+}
