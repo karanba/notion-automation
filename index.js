@@ -3,39 +3,99 @@ import { Client } from "@notionhq/client";
 
 const NOTION_TOKEN = process.env.NOTION_TOKEN;
 const NOTION_HABITS_DATABASE_ID = "232de792635b80e6a595da782add070a";
+const EXPECTED_USER_AGENT = "NotionAutomation";
+
+const notion = new Client({ auth: NOTION_TOKEN });
+
+let cachedHabitDataSourceId;
 
 http("helloHttp", async (req, res) => {
   res.set("Content-Type", "text/plain");
-  if (req.method === "POST" && req.get("user-agent") == "NotionAutomation") {
-    if (
-      req.body?.data?.properties &&
-      typeof req.body.data.properties === "object"
-    ) {
-      await updateHabit(req.body.data.properties);
-    } else {
-      console.log("No properties found in the request body.");
-    }
-  } else {
-    console.log("Invalid request method or user-agent.");
+
+  if (!isAuthorizedRequest(req)) {
+    res.status(400).send("Invalid request method or user-agent.");
+    return;
   }
-  res.send(`Hello ${req.query.name || req.body.name || "World"}!!`);
+
+  const properties = extractProperties(req);
+  if (!properties) {
+    res.status(400).send("No properties found in the request body.");
+    return;
+  }
+
+  try {
+    const habits = buildHabitsForRequest(req.path, properties);
+    if (!habits.length) {
+      res.status(200).send("No habits to update.");
+      return;
+    }
+
+    const pageId = await resolveDailyHabitPageId(properties);
+    if (!pageId) {
+      res.status(404).send("No page found for the given date.");
+      return;
+    }
+
+    await updateHabitProperties(pageId, habits);
+    res.status(200).send("Habits updated.");
+  } catch (error) {
+    console.error("Failed to update habit(s):", error);
+    res.status(500).send("Failed to update habits.");
+  }
 });
 
-async function updateHabit(properties) {
-  const notion = new Client({
-    auth: NOTION_TOKEN,
-  });
+function isAuthorizedRequest(req) {
+  return req.method === "POST" && req.get("user-agent") === EXPECTED_USER_AGENT;
+}
 
-  const iso = properties.Due.date.start;
-  const d = new Date(iso);
-  const dateOnly = d.toLocaleDateString("en-CA"); // "2025-10-08" (ISO style, local time)
+function extractProperties(req) {
+  const properties = req.body?.data?.properties;
+  return properties && typeof properties === "object" ? properties : null;
+}
 
-  const habitDatabase = await notion.databases.retrieve({
-    database_id: NOTION_HABITS_DATABASE_ID,
-  });
-  const dataSource = habitDatabase.data_sources[0];
+function buildHabitsForRequest(path, properties) {
+  const statusName = getStatusName(properties);
+
+  if (path === "/gym") {
+    return [
+      {
+        propertyName: "Gym",
+        isDone: statusName === "Done",
+      },
+    ];
+  } else if (path === "/run") {
+    return [
+      {
+        propertyName: "Walk",
+        isDone: statusName === "Done",
+      },
+    ];
+  }
+
+  const multiSelectHabits = properties?.Habit?.multi_select;
+  if (!Array.isArray(multiSelectHabits)) {
+    return [];
+  }
+
+  return multiSelectHabits
+    .map((habit) => habit?.name?.trim())
+    .filter(Boolean)
+    .map((habitName) => ({
+      propertyName: habitName,
+      isDone: statusName === "Done",
+    }));
+}
+
+function getStatusName(properties) {
+  return properties?.Status?.status?.name || "";
+}
+
+async function resolveDailyHabitPageId(properties) {
+  const dateOnly = resolveDueDate(properties);
+
+  const dataSourceId = await fetchHabitDataSourceId();
   const page = await notion.dataSources.query({
-    data_source_id: dataSource.id,
+    data_source_id: dataSourceId,
     filter: {
       property: "Day",
       date: {
@@ -44,22 +104,51 @@ async function updateHabit(properties) {
     },
   });
 
-  if (page.results.length === 1) {
-    const updateParameters = {};
+  return page.results?.[0]?.id ?? null;
+}
 
-    properties.Habit.multi_select.forEach((habit) => {
-      updateParameters[habit.name] = {
-        checkbox:
-          properties?.Status?.status?.name &&
-          properties.Status.status.name === "Done",
-      };
-    });
-
-    await notion.pages.update({
-      page_id: page.results[0].id,
-      properties: updateParameters,
-    });
-  } else {
-    console.log("No page found for the given date.");
+function resolveDueDate(properties) {
+  const iso = (properties?.Due || properties?.Date)?.date?.start;
+  if (!iso) {
+    throw new Error("Missing due date.");
   }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`Invalid due date: ${iso}`);
+  }
+
+  return date.toLocaleDateString("en-CA");
+}
+
+async function fetchHabitDataSourceId() {
+  if (cachedHabitDataSourceId) {
+    return cachedHabitDataSourceId;
+  }
+
+  const habitDatabase = await notion.databases.retrieve({
+    database_id: NOTION_HABITS_DATABASE_ID,
+  });
+
+  const dataSource = habitDatabase?.data_sources?.[0];
+  if (!dataSource?.id) {
+    throw new Error("Habit database does not have a data source configured.");
+  }
+
+  cachedHabitDataSourceId = dataSource.id;
+  return cachedHabitDataSourceId;
+}
+
+async function updateHabitProperties(pageId, habits) {
+  const propertiesToUpdate = habits.reduce((accumulator, habit) => {
+    accumulator[habit.propertyName] = {
+      checkbox: habit.isDone,
+    };
+    return accumulator;
+  }, {});
+
+  await notion.pages.update({
+    page_id: pageId,
+    properties: propertiesToUpdate,
+  });
 }
