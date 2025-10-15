@@ -109,17 +109,10 @@ async function resolveDailyHabitPageId(properties) {
 
 function resolveDueDate(properties) {
   const iso = (properties?.Due || properties?.Date)?.date?.start;
-  console.log("iso", iso);
-  if (!iso) {
-    throw new Error("Missing due date.");
-  }
+  if (!iso) throw new Error("Missing due date.");
 
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid due date: ${iso}`);
-  }
-
-  return date.toLocaleDateString("en-CA");
+  return date.toLocaleDateString("en-CA", { timeZone: "UTC" });
 }
 
 async function fetchHabitDataSourceId() {
