@@ -109,6 +109,7 @@ async function resolveDailyHabitPageId(properties) {
 
 function resolveDueDate(properties) {
   const iso = (properties?.Due || properties?.Date)?.date?.start;
+  console.log("iso", iso);
   if (!iso) {
     throw new Error("Missing due date.");
   }
