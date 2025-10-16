@@ -70,6 +70,13 @@ function buildHabitsForRequest(path, properties) {
         isDone: statusName === "Done",
       },
     ];
+  } else if (path === "/progress") {
+    return [
+      {
+        propertyName: "Water",
+        isDone: statusName === "Done",
+      },
+    ];
   }
 
   const multiSelectHabits = properties?.Habit?.multi_select;
