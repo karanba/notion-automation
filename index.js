@@ -108,12 +108,24 @@ async function resolveDailyHabitPageId(properties) {
 }
 
 function resolveDueDate(properties) {
-  const iso = (properties?.Due || properties?.Date)?.date?.start;
-  if (!iso) throw new Error("Missing due date.");
+  const raw = (properties?.Due || properties?.Date)?.date?.start;
+  if (!raw) throw new Error("Missing due date.");
 
-  const date = new Date(iso);
-  return date.toLocaleDateString("en-CA", { timeZone: "UTC" });
+  // Case 1: already a Date object
+  if (raw instanceof Date) {
+    return raw.toISOString().split("T")[0]; // keep the written date, no timezone drift
+  }
+
+  // Case 2: ISO string (like "2025-10-16T02:00:00.000+03:00")
+  if (typeof raw === "string") {
+    const match = raw.match(/^\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0];
+    throw new Error(`Invalid ISO date string: ${raw}`);
+  }
+
+  throw new Error(`Unsupported date type: ${typeof raw}`);
 }
+
 
 async function fetchHabitDataSourceId() {
   if (cachedHabitDataSourceId) {
